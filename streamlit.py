@@ -17,6 +17,8 @@ import warnings
 import shap
 import matplotlib.pyplot as plt
 from datetime import datetime
+import zipfile
+from io import StringIO
 
 # Suprimir Warnings
 warnings.filterwarnings("ignore", category=FutureWarning, module="sklearn.utils.validation")
@@ -191,19 +193,52 @@ def load_prediction_model_artifacts():
     except Exception: return (None,) * 5
 
 @st.cache_data
-def load_prediction_dataset():
+def load_prediction_model_artifacts():
+    print("DEBUG (streamlit_app): Carregando artefatos do modelo de previsão...")
     try:
-        csv_path = os.path.join(DATA_DIR, 'dataset_SP_2022_completo_com_inmet.csv')
-        df = pd.read_csv(csv_path, sep=';', decimal='.')
-        if 'data' in df.columns and not pd.api.types.is_datetime64_any_dtype(df['data']):
-             df['data'] = pd.to_datetime(df['data'], errors='coerce')
-        precip_cols = ['precip_total_dia_mm', 'precipitacao_sum']
+        model = joblib.load(os.path.join(MODEL_ARTIFACTS_DIR, 'modelo_incendio_lgbm_recall_focus.joblib'))
+        scaler = joblib.load(os.path.join(MODEL_ARTIFACTS_DIR, 'scaler_incendio_recall_focus.joblib'))
+        target_encoder = joblib.load(os.path.join(MODEL_ARTIFACTS_DIR, 'target_encoder_municipio_recall_focus.joblib'))
+        imputers_dict = joblib.load(os.path.join(MODEL_ARTIFACTS_DIR, 'imputadores_finais_recall_focus.joblib'))
+        model_columns = joblib.load(os.path.join(MODEL_ARTIFACTS_DIR, 'colunas_modelo_final_lista_recall_focus.joblib'))
+        return model, scaler, target_encoder, imputers_dict, model_columns
+    except Exception as e:
+        print(f"ERRO CRÍTICO (streamlit_app): Ao carregar artefatos PREVISÃO: {e}\n{traceback.format_exc()}")
+        return None, None, None, None, None
+
+@st.cache_data
+def load_prediction_dataset():
+    print("DEBUG (streamlit_app): Carregando dataset de previsão...")
+    zip_filename = "dataset_SP_2022_completo_com_inmet.zip" # Nome do seu arquivo ZIP
+    csv_filename_in_zip = "dataset_SP_2022_completo_com_inmet.csv" # Nome do CSV DENTRO do ZIP
+    zip_file_full_path = os.path.join(DATA_DIR, zip_filename)
+    precip_cols = ['precip_total_dia_mm', 'precipitacao_sum']
+    
+    try:
+        if not os.path.exists(zip_file_full_path):
+            print(f"ERRO (streamlit_app): Arquivo ZIP '{zip_file_full_path}' não encontrado.")
+            return None
+        with zipfile.ZipFile(zip_file_full_path, 'r') as zf:
+            if csv_filename_in_zip not in zf.namelist():
+                print(f"ERRO (streamlit_app): '{csv_filename_in_zip}' não no ZIP. Conteúdo: {zf.namelist()}")
+                return None
+            with zf.open(csv_filename_in_zip) as csv_file_in_zip:
+                csv_content_bytes = csv_file_in_zip.read()
+                try: df = pd.read_csv(StringIO(csv_content_bytes.decode('utf-8')), sep=';', decimal='.')
+                except UnicodeDecodeError: df = pd.read_csv(StringIO(csv_content_bytes.decode('latin1')), sep=';', decimal='.')
+        
+        if 'municipio' not in df.columns or 'data' not in df.columns: return None
+        if not pd.api.types.is_datetime64_any_dtype(df['data']):
+            df['data'] = pd.to_datetime(df['data'], errors='coerce')
         for p_col in precip_cols:
             if p_col in df.columns and df[p_col].dtype == 'object':
                 df[p_col] = df[p_col].astype(str).str.replace(',', '.', regex=False)
                 df[p_col] = pd.to_numeric(df[p_col], errors='coerce')
+        print(f"DEBUG (streamlit_app): Dataset carregado do ZIP. Shape: {df.shape}")
         return df
-    except Exception: return None
+    except Exception as e:
+        print(f"ERRO (streamlit_app): Ao carregar dataset PREVISÃO do ZIP: {e}\n{traceback.format_exc()}")
+        return None
 
 # --- Inicialização de variáveis de estado (PREVISÃO) ---
 pred_model, pred_scaler, pred_target_encoder, pred_imputers, pred_model_columns = (None,) * 5
