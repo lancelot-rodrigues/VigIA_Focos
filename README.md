@@ -16,8 +16,8 @@ Bem-vindo à **VigIA Focos**! Esta plataforma unifica três soluções de Inteli
     *   [Executando a Aplicação](#executando-a-aplicação)
 4.  [Funcionalidades por Módulo (Disciplina)](#funcionalidades-por-módulo-disciplina)
     *   [Módulo 1: Previsão de Risco de Incêndio (Front End & Mobile)](#módulo-1-previsão-de-risco-de-incêndio-front-end--mobile)
-    *   [Módulo 2: Assistente Virtual VigIA (Generative AI - RAG)](#módulo-2-assistente-virtual-vigia-generative-ai---rag)
-    *   [Módulo 3: Monitoramento de Queimadas (AI for RPA)](#módulo-3-monitoramento-de-queimadas-ai-for-rpa)
+    *   [Módulo 2: Assistente Virtual VigIA (Generative AI)](#módulo-2-assistente-virtual-vigia-generative-ai)
+    *   [Módulo 3: Monitoramento de Queimadas (RPA)](#módulo-3-monitoramento-de-queimadas-rpa)
 5.  [Relatórios Detalhados](#relatórios-detalhados)
 6.  [Autores](#autores)
 
@@ -57,7 +57,6 @@ O objetivo é fornecer uma ferramenta multifacetada para usuários interessados 
 ### Pré-requisitos
 
 *   Python 3.11 ou superior instalado.
-*   `pip` (gerenciador de pacotes Python).
 *   (Opcional, mas recomendado) Um ambiente virtual Python (ex: venv, Conda).
 
 ### Configuração do Ambiente
@@ -116,17 +115,17 @@ A plataforma está dividida em módulos acessíveis pela barra lateral de navega
 *   **Funcionalidade:** Permite ao usuário selecionar um município de São Paulo e uma data (dentro de 2022) para obter uma previsão da probabilidade de ocorrência de incêndio. Apresenta interpretabilidade do modelo usando SHAP.
 *   **Relatório Detalhado:** Consulte `relatorios_e_documentacao/Relatorio_FrontEnd_Mobile.pdf`.
 
-### Módulo 2: Assistente Virtual VigIA (Generative AI - RAG)
+### Módulo 2: Assistente Virtual VigIA (Generative AI
 
 *   **Aba:** "💬 Assistente VigIA"
 *   **Funcionalidade:** Chatbot interativo que fornece orientações sobre incêndios, adaptadas ao perfil do usuário (Vítima, Morador, Familiar), utilizando busca na web em tempo real para enriquecer as respostas.
-*   **Relatório Detalhado:** (A ser adicionado: `relatorios_e_documentacao/Relatorio_GenAI_RAG.pdf`).
+*   **Relatório Detalhado:** (A ser adicionado: `relatorios_e_documentacao/Relatorio_Generative_AI.pdf`).
 
-### Módulo 3: Monitoramento de Queimadas (AI for RPA)
+### Módulo 3: Monitoramento de Queimadas (RPA)
 
 *   **Aba:** "📊 Análise Descritiva" (Seção "Monitoramento de Queimadas Atuais em SP (Fonte: INPE)")
 *   **Funcionalidade:** Automatiza a coleta, processamento e apresentação de dados recentes de focos de queimada do INPE para o estado de São Paulo, permitindo análises e alertas.
-*   **Relatório Detalhado:** (A ser adicionado: `relatorios_e_documentacao/Relatorio_AI_for_RPA.pdf`).
+*   **Relatório Detalhado:** (A ser adicionado: `relatorios_e_documentacao/Relatorio_RPA_IA.pdf`).
 
 ---
 
