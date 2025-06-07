@@ -1,48 +1,53 @@
-# rag_assistant_tab.py
-
+# ==============================================================================
+# ETAPA 1: IMPORTAÇÕES E CONFIGURAÇÕES INICIAIS
+# ==============================================================================
 import streamlit as st
-import google.generativeai as genai # Import completo
+import google.generativeai as genai
 import re
 import os
 import traceback
 
-# Importar a função principal de recuperação do RAG_utils
 from utils.RAG_utils import retrieve_web_context_for_rag, NLTK_PACKAGES_DOWNLOADED_KEY_V3
 
-# --- Configurações ---
 ROBOT_NAME = "VigIA"
 
-# Carregamento seguro da API Key
+# Tenta carregar a chave de API do Google de forma segura a partir dos segredos do Streamlit ou variáveis de ambiente.
 try:
     GOOGLE_API_KEY = st.secrets.get("GOOGLE_API_KEY", os.environ.get("GOOGLE_API_KEY"))
 except Exception:
     GOOGLE_API_KEY = os.environ.get("GOOGLE_API_KEY")
 
+# Define um valor padrão caso a chave de API não seja encontrada.
 if not GOOGLE_API_KEY:
     GOOGLE_API_KEY = "SUA_CHAVE_DE_API_GOOGLE_AQUI_NAO_CONFIGURADA"
 
-# Configuração do genai e do modelo LLM
+# Configura a biblioteca do Google e inicializa o modelo generativo se a chave de API for válida.
 llm = None
 if GOOGLE_API_KEY and GOOGLE_API_KEY != "SUA_CHAVE_DE_API_GOOGLE_AQUI_NAO_CONFIGURADA":
     try:
         genai.configure(api_key=GOOGLE_API_KEY)
         GENERATION_MODEL_NAME = "gemini-1.5-pro-latest"
         llm = genai.GenerativeModel(GENERATION_MODEL_NAME)
-        # print(f"DEBUG (rag_assistant_tab): LLM ({GENERATION_MODEL_NAME}) inicializado.")
     except Exception as e:
-        print(f"DEBUG (rag_assistant_tab): Erro na inicialização do GenAI: {traceback.format_exc()}")
+        print(f"ERRO (rag_assistant_tab): Falha na inicialização do GenAI: {traceback.format_exc()}")
 else:
     print(f"AVISO (rag_assistant_tab): {ROBOT_NAME} - GOOGLE_API_KEY não configurada.")
 
 
+# ==============================================================================
+# ETAPA 2: GERAÇÃO DA RESPOSTA COM RAG (Retrieval-Augmented Generation)
+# ==============================================================================
 def generate_rag_response_with_google_api_tab(user_profile, user_query, retrieved_contexts_list):
+    """Gera uma resposta do assistente usando o contexto recuperado da web e um prompt estruturado."""
+    # Retorna uma mensagem de modo offline se o modelo de linguagem não foi inicializado.
     if not llm:
         context_preview = retrieved_contexts_list[0][:70] if retrieved_contexts_list else "sem contexto disponível"
         return f"({ROBOT_NAME} - MODO OFFLINE: LLM não inicializado) Resposta para '{user_query}'. Contexto: '{context_preview}...'"
 
+    # Concatena os múltiplos contextos recuperados em uma única string.
     context_str = "\n\n---\n\n".join(retrieved_contexts_list)
     
-    # COLE SEU SYSTEM PROMPT REFINADO E COMPLETO AQUI (como na mensagem anterior)
+    # Monta o prompt detalhado para o modelo, definindo seu papel, regras e a fonte de informação.
     prompt = f"""SYSTEM:
 Você é {ROBOT_NAME}, um assistente virtual altamente especializado, calmo, preciso e empático, dedicado a fornecer orientação durante desastres naturais, com FOCO EXCLUSIVO EM INCÊNDIOS.
 Seu objetivo principal é ajudar usuários a se manterem seguros e informados sobre situações de incêndio.
@@ -72,74 +77,65 @@ INSTRUÇÕES ADICIONAIS PARA O TOM E CONTEÚDO, CONFORME O PERFIL:
 -   **Para todos:** Se o contexto citar contatos de emergência (193 Bombeiros, 199 Defesa Civil), reforce-os se relevante. Lembre de seguir autoridades e procurar ajuda profissional.
 
 RESPOSTA CUIDADOSA DE {ROBOT_NAME}:"""
-    # FIM DO LOCAL PARA COLAR O PROMPT
     
     try:
+        # Define os parâmetros de geração, como a temperatura para controlar a criatividade da resposta.
         generation_config = genai.types.GenerationConfig(temperature=0.7)
         
-        # ***** SAFETY SETTINGS CORRIGIDAS *****
+        # Define as configurações de segurança para filtrar conteúdo potencialmente prejudicial.
         safety_settings_corrected = [
-            {
-                "category": genai.types.HarmCategory.HARM_CATEGORY_HARASSMENT,
-                "threshold": genai.types.HarmBlockThreshold.BLOCK_MEDIUM_AND_ABOVE,
-            },
-            {
-                "category": genai.types.HarmCategory.HARM_CATEGORY_HATE_SPEECH,
-                "threshold": genai.types.HarmBlockThreshold.BLOCK_MEDIUM_AND_ABOVE,
-            },
-            {
-                "category": genai.types.HarmCategory.HARM_CATEGORY_SEXUALLY_EXPLICIT,
-                "threshold": genai.types.HarmBlockThreshold.BLOCK_MEDIUM_AND_ABOVE,
-            },
-            {
-                "category": genai.types.HarmCategory.HARM_CATEGORY_DANGEROUS_CONTENT,
-                "threshold": genai.types.HarmBlockThreshold.BLOCK_MEDIUM_AND_ABOVE,
-            },
-            # A categoria HARM_CATEGORY_CIVIC_INTEGRITY é válida, mas vamos começar com as 4 principais.
-            # Se o erro persistir, podemos tentar adicionar outras ou simplificar.
+            {"category": genai.types.HarmCategory.HARM_CATEGORY_HARASSMENT, "threshold": genai.types.HarmBlockThreshold.BLOCK_MEDIUM_AND_ABOVE},
+            {"category": genai.types.HarmCategory.HARM_CATEGORY_HATE_SPEECH, "threshold": genai.types.HarmBlockThreshold.BLOCK_MEDIUM_AND_ABOVE},
+            {"category": genai.types.HarmCategory.HARM_CATEGORY_SEXUALLY_EXPLICIT, "threshold": genai.types.HarmBlockThreshold.BLOCK_MEDIUM_AND_ABOVE},
+            {"category": genai.types.HarmCategory.HARM_CATEGORY_DANGEROUS_CONTENT, "threshold": genai.types.HarmBlockThreshold.BLOCK_MEDIUM_AND_ABOVE},
         ]
         
+        # Envia o prompt para a API do Google e aguarda a geração da resposta.
         response = llm.generate_content(
             prompt,
             generation_config=generation_config,
             safety_settings=safety_settings_corrected
         )
         
+        # Processa a resposta da API, tratando casos de sucesso, bloqueio ou erro.
         if response.parts:
             return response.text
         elif response.prompt_feedback and response.prompt_feedback.block_reason:
              block_reason_msg = response.prompt_feedback.block_reason
-             # safety_ratings_msg = response.prompt_feedback.safety_ratings if response.prompt_feedback.safety_ratings else "N/A" # Debug
-             # print(f"AVISO (rag_assistant_tab): Resposta bloqueada. Razão: {block_reason_msg}, Safety Ratings: {safety_ratings_msg}")
              return f"Desculpe, {ROBOT_NAME} não pôde responder devido a restrições de conteúdo (Razão: {block_reason_msg})."
         else:
-            # print(f"AVISO (rag_assistant_tab): Resposta da API vazia ou em formato inesperado. {response}")
             return f"Desculpe, {ROBOT_NAME} não conseguiu gerar uma resposta no momento (API não retornou texto útil)."
 
     except Exception as e:
-        print(f"DEBUG (rag_assistant_tab): Erro na chamada GenAI na função generate_rag_response: {traceback.format_exc()}")
+        print(f"ERRO (rag_assistant_tab): Falha na chamada GenAI: {traceback.format_exc()}")
         return f"Desculpe, {ROBOT_NAME} teve um problema técnico ao gerar a resposta. Detalhe: {type(e).__name__}"
 
+
+# ==============================================================================
+# ETAPA 3: RENDERIZAÇÃO E LÓGICA DA INTERFACE DE CHAT
+# ==============================================================================
 def display_rag_chat_tab():
-    # ... (código de header, verificações de API KEY, LLM, NLTK como na última versão) ...
+    """Renderiza a aba de chat do assistente virtual no Streamlit."""
     st.header(f"Assistente Virtual {ROBOT_NAME}")
     st.markdown(f"Olá! Sou {ROBOT_NAME}, seu assistente para orientações sobre **incêndios**.")
 
+    # Realiza verificações prévias para garantir que os componentes essenciais estão funcionando.
     if not GOOGLE_API_KEY or GOOGLE_API_KEY == "SUA_CHAVE_DE_API_GOOGLE_AQUI_NAO_CONFIGURADA":
         st.error(f"{ROBOT_NAME} não pode operar: Chave Google API não configurada.")
         return
     if not llm:
          st.error(f"{ROBOT_NAME} não inicializado (modelo de linguagem). Verifique config da API.")
          return
-    if not st.session_state.get(NLTK_PACKAGES_DOWNLOADED_KEY_V3, False): # Verifica flag NLTK
+    if not st.session_state.get(NLTK_PACKAGES_DOWNLOADED_KEY_V3, False):
         st.warning(f"{ROBOT_NAME} pode ter dificuldades com conteúdo web (NLTK). Veja console.")
 
-    session_prefix = f"{ROBOT_NAME}_chat_v5.1_" # Novo prefixo
+    # Inicializa o estado da sessão para armazenar o histórico de mensagens e o perfil do usuário.
+    session_prefix = f"{ROBOT_NAME}_chat_v5.1_"
     if f"{session_prefix}messages" not in st.session_state: st.session_state[f"{session_prefix}messages"] = []
     if f"{session_prefix}user_profile" not in st.session_state: st.session_state[f"{session_prefix}user_profile"] = None
     if f"{session_prefix}profile_prompted" not in st.session_state: st.session_state[f"{session_prefix}profile_prompted"] = False
     
-    # ... (loop para exibir mensagens e lógica de seleção de perfil como na última versão) ...
+    # Exibe todas as mensagens do histórico do chat na interface.
     for message in st.session_state[f"{session_prefix}messages"]:
         avatar_icon = "🤖" if message["role"] == "assistant" else "👤"
         with st.chat_message(message["role"], avatar=avatar_icon):
@@ -147,6 +143,11 @@ def display_rag_chat_tab():
 
     current_user_profile = st.session_state[f"{session_prefix}user_profile"]
 
+    # ==========================================================================
+    # ETAPA 4: GERENCIAMENTO DO FLUXO DE CONVERSA (SELEÇÃO DE PERFIL E CHAT)
+    # ==========================================================================
+    
+    # Se o perfil do usuário ainda não foi definido, solicita a seleção.
     if not current_user_profile:
         if not st.session_state[f"{session_prefix}profile_prompted"]:
             greeting = (f"Para começar, qual seu perfil?\n\n1. **Vítima**\n2. **Morador**\n3. **Familiar**\n\nDigite o número ou nome.")
@@ -154,12 +155,10 @@ def display_rag_chat_tab():
             with st.chat_message("assistant", avatar="🤖"): st.markdown(greeting)
             st.session_state[f"{session_prefix}profile_prompted"] = True
         
-        profile_val = st.chat_input("Seu perfil:", key=f"{session_prefix}prof_in_v10") # Nova chave
+        # Captura e processa a entrada do usuário para definir o perfil.
+        profile_val = st.chat_input("Seu perfil:", key=f"{session_prefix}prof_in_v10")
         if profile_val:
-            # Lógica de seleção de perfil (COLE SUA LÓGICA FUNCIONAL AQUI)
-            # Exemplo da última vez:
             st.session_state[f"{session_prefix}messages"].append({"role": "user", "content": profile_val})
-            # with st.chat_message("user", avatar="👤"): st.markdown(profile_val) # O loop acima já mostra
             raw_prof_in = profile_val.strip(); num_prof_chk="".join(filter(str.isdigit,raw_prof_in)); txt_prof_chk=raw_prof_in.lower(); sel_prof_txt=None
             if num_prof_chk == "1" or bool(re.search(r'\b(vitima|vítima)\b', txt_prof_chk)): st.session_state[f"{session_prefix}user_profile"], sel_prof_txt = "Vítima", "Vítima"
             elif num_prof_chk == "2" or bool(re.search(r'\bmorador(a)?\b', txt_prof_chk)): st.session_state[f"{session_prefix}user_profile"], sel_prof_txt = "Morador", "Morador"
@@ -170,30 +169,37 @@ def display_rag_chat_tab():
             if st.session_state[f"{session_prefix}user_profile"]:
                 confirm_txt = f"Entendido. Perfil: **{sel_prof_txt}**. Como posso ajudar sobre incêndios?"
                 st.session_state[f"{session_prefix}messages"].append({"role": "assistant", "content": confirm_txt})
-            st.rerun() # Rerun para atualizar a UI e mostrar o input de pergunta ou erro
+            st.rerun()
             
-    elif current_user_profile: # Lógica de chat normal
+    # Se um perfil já foi definido, entra no fluxo de chat normal.
+    elif current_user_profile:
         query_val = st.chat_input(f"Pergunte a {ROBOT_NAME} (Perfil: {current_user_profile}) ou digite 'mudar perfil'", key=f"{session_prefix}q_in_v10_{current_user_profile.lower()}")
         if query_val:
             st.session_state[f"{session_prefix}messages"].append({"role": "user", "content": query_val})
-            # with st.chat_message("user", avatar="👤"): st.markdown(query_val) # O loop acima já mostra
             
             norm_query = query_val.lower().strip()
             change_keywords = ["mudar perfil", "trocar perfil", "outro perfil", "mudar usuario", "trocar usuario", "resetar perfil"]
+            
+            # Verifica se o usuário deseja trocar de perfil.
             if any(keyword in norm_query for keyword in change_keywords):
                 st.session_state[f"{session_prefix}user_profile"] = None
                 st.session_state[f"{session_prefix}profile_prompted"] = False
                 st.session_state[f"{session_prefix}messages"].append({"role": "assistant", "content": "Ok, seu perfil foi redefinido. Por favor, selecione novamente."})
                 st.rerun()
+            # Caso contrário, processa a pergunta do usuário.
             else:
                 with st.spinner(f"{ROBOT_NAME} pesquisando..."):
                     retrieved_contexts = retrieve_web_context_for_rag(user_query=query_val)
                     assistant_response = generate_rag_response_with_google_api_tab(current_user_profile, query_val, retrieved_contexts)
                 st.session_state[f"{session_prefix}messages"].append({"role": "assistant", "content": assistant_response})
-                st.rerun() # Rerun para mostrar a resposta do assistente e o input de chat abaixo
+                st.rerun()
 
-    # Forçar scroll para baixo (JavaScript hack)
-    if st.session_state.get(f"{session_prefix}messages"): # Verifica se há mensagens antes de tentar rolar
+    # ==========================================================================
+    # ETAPA 5: AJUSTES FINAIS DA INTERFACE (AUTO-SCROLL)
+    # ==========================================================================
+
+    # Injeta um script JavaScript para rolar a tela automaticamente para a mensagem mais recente.
+    if st.session_state.get(f"{session_prefix}messages"):
         js_scroll_to_bottom = """
         <script>
             setTimeout(function() {
@@ -206,8 +212,8 @@ def display_rag_chat_tab():
             }, 150);
         </script>
         """
-        # O seletor do chatContainer pode precisar de ajuste fino dependendo da estrutura exata do Streamlit DOM
         st.components.v1.html(js_scroll_to_bottom, height=0, scrolling=False)
 
+# Ponto de entrada para executar a aba de chat.
 if __name__ == "__main__":
     display_rag_chat_tab()
